@@ -1,0 +1,90 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+.python-version
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+
+# Model files & weights
+weights/*/
+*.pth
+*.pt
+*.bin
+*.onnx
+*.tflite
+*.pb
+checkpoint/
+checkpoints/
+*.ckpt
+
+# Logs & metrics
+logs/
+*.log
+runs/
+events.out.tfevents.*
+wandb/
+tb_logs/
+
+# Data
+data/
+datasets/
+*.csv
+*.h5
+*.pkl
+*.npy
+*.npz
+
+# Temporary files
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+*.swp
+*.bak
+*~
+
+# Cache
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ray tune
+ray_results/
+
+# Env files
+.env*
+
+# Docker
+.dockerignore
+Dockerfile*
+docker-compose*
+
+# CUDA profiler
+*.nvvp
+*.ncu-rep 
