@@ -5,12 +5,17 @@ from modules.tester import BaseTester
 import os
 import pandas as pd
 from dev import build_model, get_model_config
+from tqdm import tqdm
+from modules.dataloaders import R2DataLoader
+from modules.tokenizers_enhanced import EnhancedTokenizer as Tokenizer
+import json
 
 from modules.metrics import compute_scores
 from config.configs import Test_Config
-from modules.tokenizers import Tokenizer 
-from modules.dataloaders import R2DataLoader
 
+
+import warnings
+warnings.filterwarnings("ignore")
 
 def generate_batch(model, images, tokenizer, device, max_length=150, temperature=1.0, min_length=30, repeat_penalty=1.5, top_p=0.9):
     """
@@ -173,7 +178,7 @@ def main(args):
     model = build_model(args, tokenizer, model_config)
 
     # Load checkpoint
-    checkpoint = torch.load(args.load)
+    checkpoint = torch.load(args.load, weights_only=True)
     model.load_state_dict(checkpoint['model_state_dict'])
     model = model.to(device)
 

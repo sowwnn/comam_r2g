@@ -122,7 +122,8 @@ class AnatomaMamba(nn.Module):
         caption_loss_weight=1.0,
         contrastive_loss_weight=1.0,
         temperature=0.07,
-        max_epochs=50
+        max_epochs=50,
+        tokenizer=None
     ):
         super().__init__()
         
@@ -152,8 +153,23 @@ class AnatomaMamba(nn.Module):
         # Thêm medical attention cho image features
         self.img_med_attention = MedicalAttentionGate(dim)
         
+        # Lưu trữ tokenizer để sử dụng
+        self.tokenizer = tokenizer
+        
         # Text encoder đơn giản cho contrastive learning
         self.token_emb = nn.Embedding(num_tokens, dim)
+        
+        # Nếu tokenizer được cung cấp và có embedding matrix, khởi tạo token_emb từ đó
+        if exists(tokenizer) and hasattr(tokenizer, 'get_embedding_matrix'):
+            pretrained_embeddings = tokenizer.get_embedding_matrix()
+            # Chỉ sao chép embedding cho các token có trong từ điển (theo ID)
+            with torch.no_grad():
+                for token, idx in tokenizer.token2idx.items():
+                    if idx < self.token_emb.weight.shape[0]:
+                        self.token_emb.weight[idx] = torch.tensor(pretrained_embeddings[idx], dtype=self.token_emb.weight.dtype)
+            # Lưu thông báo
+            print("Đã khởi tạo token embeddings từ tokenizer với các vector đã căn chỉnh.")
+        
         self.pos_emb = nn.Parameter(torch.randn(1, 1024, dim) * 0.02)
         self.text_encoder = nn.Sequential(
             nn.LayerNorm(dim),
@@ -306,12 +322,12 @@ def create_anatomamba(
     caption_loss_weight=1.0,
     contrastive_loss_weight=1.0,
     max_epochs=50,
+    tokenizer=None,
     **kwargs
 ):
-    """
-    Tạo mô hình AnatomaMamba với ConvNeXt-Mamba encoder
-    """
-    # Tạo image encoder
+    """Tạo mô hình AnatomaMamba với ConvNext+Mamba image encoder"""
+
+    # Tạo mô hình ConvNeXt-Mamba cho encoder
     img_encoder = create_convnext_mamba_coca(
         image_size=image_size,
         in_chans=in_chans,
@@ -321,21 +337,22 @@ def create_anatomamba(
         d_conv=d_conv,
         expand=expand,
         drop_path_rate=drop_path_rate,
-        target_dim=dims[-1]
+        **kwargs
     )
     
-    # Tạo AnatomaMamba
+    # Tạo mô hình AnatomaMamba hoàn chỉnh
     model = AnatomaMamba(
         dim=mamba_dim,
         img_encoder=img_encoder,
         num_tokens=num_tokens,
         decoder_depth=decoder_depth,
         d_state=d_state,
-        d_conv=d_conv, 
+        d_conv=d_conv,
         expand=expand,
         caption_loss_weight=caption_loss_weight,
         contrastive_loss_weight=contrastive_loss_weight,
-        max_epochs=max_epochs
+        max_epochs=max_epochs,
+        tokenizer=tokenizer
     )
     
     return model

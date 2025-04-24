@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from modules.dataloaders import R2DataLoader
-from modules.tokenizers import Tokenizer
+from modules.tokenizers_enhanced import EnhancedTokenizer as Tokenizer
 import os
 import json
 
@@ -12,9 +12,9 @@ from config.configs import Test_Config
 from coca_pytorch.coca_pytorch import CoCa
 # from models.coca import CoCa
 from lion_pytorch import Lion
-from torch.optim.lr_scheduler import CosineAnnealingLR, OneCycleLR
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.amp import autocast, GradScaler
-
+from torch.optim.lr_scheduler import OneCycleLR
 
 # from vit_pytorch.simple_vit_with_patch_dropout import SimpleViT
 # from vit_pytorch.cross_vit import CrossViT
@@ -27,6 +27,9 @@ from models.cnext_mam_3 import create_convnext_mamba_coca
 # from models.comamba import create_comamba
 from models.anatomamba import create_anatomamba, small_config, base_config
 from models.anatomamba_cra import create_anatomamba_cra
+
+import warnings
+warnings.filterwarnings("ignore")
 
 
 def set_seed(seed=5401):
@@ -48,7 +51,7 @@ def get_model_config():
     config['dims'] = [64, 128, 256, 512]
     config['d_state'] = 8
     config['mamba_dim'] = 512
-    config['decoder_depth'] = 4
+    config['decoder_depth'] = 8
     config['num_heads'] = 8
 
     config['caption_loss_weight'] = 0.5
@@ -89,7 +92,8 @@ def build_model(args, tokenizer, config):
         cross_region_loss_weight=config['cross_region_loss_weight'],
         max_epochs=config['max_epochs'],
         num_heads=config['num_heads'],
-        abnormal_terms=abnormal_terms
+        abnormal_terms=abnormal_terms,
+        tokenizer=tokenizer
     )
 
     # Lưu cấu hình mô hình
@@ -221,17 +225,17 @@ def main(args):
     )
 
     # Thiết lập scheduler với warmup
-    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.4, min_lr=1e-6, patience=3, verbose=True)
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.num_epochs * len(train_dataloader), eta_min=1e-6)
     scheduler = OneCycleLR(
         optimizer,
-        max_lr=3e-4,
+        max_lr=1e-4,
         pct_start=0.1,  # 10% đầu tiên là warmup
         total_steps=args.num_epochs * len(train_dataloader),
         anneal_strategy='cos',
         div_factor=25,  # LR ban đầu = max_lr/25
         final_div_factor=1000  # LR cuối = max_lr/1000
     )
-    
+
     # Vòng lặp huấn luyện
     num_epochs = args.num_epochs
     best_val_loss = float('inf')

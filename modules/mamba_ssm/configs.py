@@ -6,7 +6,7 @@ class Test_Config():
     max_seq_length = 60
     threshold = 1
     max_length = 32
-    temperature= 0.1
+    temperature= 0.3
 
     # image_dir = "/mnt/e/Sho/mimic_cxr/images"
     # ann_path = "/mnt/e/Sho/mimic_cxr/annotations.json"
@@ -21,7 +21,7 @@ class Test_Config():
     num_workers = 12
     transform = None
     learning_rate = 1e-4
-    num_epochs = 200
+    num_epochs = 100
     seed = 5401
 
     
