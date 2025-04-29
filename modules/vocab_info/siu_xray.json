@@ -1,0 +1,162 @@
+{
+  "synonym_mapping": {
+    "cardiomediastinal": "heart",
+    "cardiac": "heart",
+    "cardio": "heart",
+    "cardiovascular": "heart",
+    "lungs": "lung",
+    "pulmonary": "lung",
+    "airspace": "lung",
+    "lung fields": "lung",
+    "mediastinal": "mediastinum",
+    "mediastinal contour": "mediastinum",
+    "mediastinal silhouette": "mediastinum",
+    "opacities": "opacity",
+    "opacification": "opacity",
+    "infiltration": "infiltrate",
+    "airspace disease": "infiltrate",
+    "focal airspace disease": "infiltrate",
+    "consolidation": "infiltrate",
+    "pneumonia": "infiltrate",
+    "unremarkable": "normal",
+    "within normal limits": "normal",
+    "within limits of normal": "normal",
+    "stable": "normal",
+    "unchanged": "normal",
+    "appear normal": "normal",
+    "appears normal": "normal",
+    "intact": "normal",
+    "grossly normal": "normal",
+    "free of": "clear",
+    "without infiltrate": "clear",
+    "without consolidation": "clear",
+    "without evidence of": "clear",
+    "no evidence of": "clear",
+    "negative for": "clear",
+    "without": "no",
+    "absence": "no",
+    "absent": "no",
+    "negative": "no",
+    "not seen": "no",
+    "contour": "silhouette",
+    "contours": "silhouette",
+    "border": "silhouette",
+    "margins": "silhouette",
+    "bony": "osseous",
+    "skeletal": "osseous",
+    "rib": "osseous",
+    "thoracic spine": "osseous"
+  },
+  "medical_phrases": {
+    "heart size is normal": [
+      "normal heart size",
+      "heart is normal in size",
+      "normal sized heart",
+      "heart size normal"
+    ],
+    "lungs are clear": [
+      "clear lungs",
+      "lung fields are clear",
+      "both lungs are clear",
+      "lungs clear",
+      "no focal airspace opacity",
+      "no focal consolidation"
+    ],
+    "no pleural effusion": [
+      "without pleural effusion",
+      "no effusion",
+      "no evidence of pleural effusion",
+      "no pleural fluid",
+      "absence of pleural fluid"
+    ],
+    "no pneumothorax": [
+      "without pneumothorax",
+      "pneumothorax is absent",
+      "no evidence of pneumothorax"
+    ],
+    "within normal limits": [
+      "normal",
+      "unremarkable",
+      "within normal parameters",
+      "within normal range"
+    ],
+    "no evidence of": [
+      "without",
+      "negative for",
+      "no sign of",
+      "no finding of",
+      "absent"
+    ],
+    "bony structures are intact": [
+      "osseous structures are intact",
+      "no acute bony abnormality",
+      "no fracture",
+      "visualized osseous structures appear intact"
+    ],
+    "cardiomediastinal silhouette is normal": [
+      "normal cardiomediastinal silhouette",
+      "cardiomediastinal contours are normal"
+    ]
+  },
+  "semantic_groups": {
+    "heart_terms": [
+      "heart",
+      "cardiac",
+      "cardiomediastinal",
+      "cardiovascular",
+      "silhouette",
+      "contour"
+    ],
+    "lung_terms": [
+      "lung",
+      "lungs",
+      "pulmonary",
+      "airspace",
+      "bronchial"
+    ],
+    "mediastinum_terms": [
+      "mediastinum",
+      "mediastinal",
+      "hilum",
+      "hilar"
+    ],
+    "abnormal_terms": [
+      "opacity",
+      "opacities",
+      "infiltrate",
+      "consolidation",
+      "effusion",
+      "pneumothorax",
+      "edema",
+      "mass",
+      "nodule",
+      "atelectasis",
+      "pneumonia"
+    ],
+    "normal_terms": [
+      "normal",
+      "unremarkable",
+      "clear",
+      "stable",
+      "intact",
+      "limits"
+    ],
+    "negation_terms": [
+      "no",
+      "without",
+      "not",
+      "absence",
+      "negative"
+    ],
+    "descriptor_terms": [
+      "focal",
+      "diffuse",
+      "mild",
+      "moderate",
+      "severe",
+      "small",
+      "large",
+      "acute"
+    ]
+  }
+} 

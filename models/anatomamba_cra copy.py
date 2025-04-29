@@ -7,147 +7,6 @@ from models.cnext_mam_3 import create_convnext_mamba_coca, DyT
 from models.cross_region_attention import CrossRegionAttention, cross_region_loss, detect_abnormal_regions
 
 
-# Helpers từ CoCa
-def exists(val):
-    return val is not None
-
-def default(val, d):
-    return val if exists(val) else d
-
-
-# Rotary Positional Embedding từ CoCa
-class RotaryEmbedding(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
-
-    def forward(self, max_seq_len, *, device):
-        seq = torch.arange(max_seq_len, device=device, dtype=self.inv_freq.dtype)
-        freqs = torch.einsum("i , j -> i j", seq, self.inv_freq)
-        return torch.cat((freqs, freqs), dim=-1)
-
-
-def rotate_half(x):
-    x = rearrange(x, "... (j d) -> ... j d", j=2)
-    x1, x2 = x.unbind(dim=-2)
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(pos, t):
-    return (t * pos.cos()) + (rotate_half(t) * pos.sin())
-
-
-# SwiGLU activation 
-class SwiGLU(nn.Module):
-    def forward(self, x):
-        x, gate = x.chunk(2, dim=-1)
-        return F.silu(gate) * x
-
-
-# Residual block
-class Residual(nn.Module):
-    def __init__(self, fn):
-        super().__init__()
-        self.fn = fn
-
-    def forward(self, x, *args, **kwargs):
-        return self.fn(x, *args, **kwargs) + x
-
-
-# ParallelTransformerBlock từ CoCa
-class ParallelTransformerBlock(nn.Module):
-    def __init__(self, dim, dim_head=64, heads=8, ff_mult=4):
-        super().__init__()
-        self.norm = nn.LayerNorm(dim)
-
-        attn_inner_dim = dim_head * heads
-        ff_inner_dim = dim * ff_mult
-        self.fused_dims = (attn_inner_dim, dim_head, dim_head, (ff_inner_dim * 2))
-
-        self.heads = heads
-        self.scale = dim_head**-0.5
-        self.rotary_emb = RotaryEmbedding(dim_head)
-
-        self.fused_attn_ff_proj = nn.Linear(dim, sum(self.fused_dims), bias=False)
-        self.attn_out = nn.Linear(attn_inner_dim, dim, bias=False)
-
-        self.ff_out = nn.Sequential(
-            SwiGLU(),
-            nn.Linear(ff_inner_dim, dim, bias=False)
-        )
-
-        # for caching causal mask and rotary embeddings
-        self.mask = None
-        self.pos_emb = None
-
-    def get_mask(self, n, device):
-        if self.mask is not None and self.mask.shape[-1] >= n:
-            return self.mask[:n, :n].to(device)
-
-        mask = torch.ones((n, n), device=device, dtype=torch.bool).triu(1)
-        self.mask = mask
-        return mask
-
-    def get_rotary_embedding(self, n, device):
-        if self.pos_emb is not None and self.pos_emb.shape[-2] >= n:
-            return self.pos_emb[:n].to(device)
-
-        pos_emb = self.rotary_emb(n, device=device)
-        self.pos_emb = pos_emb
-        return pos_emb
-
-    def forward(self, x, attn_mask=None):
-        """
-        einstein notation
-        b - batch
-        h - heads
-        n, i, j - sequence length (base sequence length, source, target)
-        d - feature dimension
-        """
-
-        n, device, h = x.shape[1], x.device, self.heads
-
-        # pre layernorm
-        x = self.norm(x)
-
-        # attention queries, keys, values, and feedforward inner
-        q, k, v, ff = self.fused_attn_ff_proj(x).split(self.fused_dims, dim=-1)
-
-        # split heads
-        q = rearrange(q, "b n (h d) -> b h n d", h=h)
-
-        # rotary embeddings
-        positions = self.get_rotary_embedding(n, device)
-        q, k = map(lambda t: apply_rotary_pos_emb(positions, t), (q, k))
-
-        # scale
-        q = q * self.scale
-
-        # similarity
-        sim = torch.einsum("b h i d, b j d -> b h i j", q, k)
-
-        # causal mask
-        causal_mask = self.get_mask(n, device)
-        sim = sim.masked_fill(causal_mask, -torch.finfo(sim.dtype).max)
-
-        # extra attention mask - for masking out attention from text CLS token to padding
-        if exists(attn_mask):
-            attn_mask = rearrange(attn_mask, 'b i j -> b 1 i j')
-            sim = sim.masked_fill(~attn_mask, -torch.finfo(sim.dtype).max)
-
-        # attention
-        sim = sim - sim.amax(dim=-1, keepdim=True).detach()
-        attn = sim.softmax(dim=-1)
-
-        # aggregate values
-        out = torch.einsum("b h i j, b j d -> b h i d", attn, v)
-
-        # merge heads
-        out = rearrange(out, "b h n d -> b n (h d)")
-        return self.attn_out(out) + self.ff_out(ff)
-
-
 class MedicalAttentionGate(nn.Module):
     """
     Cơ chế chú ý đặc biệt cho các đặc trưng y tế quan trọng
@@ -275,8 +134,7 @@ class AnatomaMambaCRA(nn.Module):
         num_heads=8,
         abnormal_terms=None,
         tokenizer=None,
-        text_layers=1,
-        use_coca_text_encoder=True  # Thêm tùy chọn để bật/tắt text encoder kiểu CoCa
+        text_layers=1
     ):
         super().__init__()
         
@@ -332,38 +190,41 @@ class AnatomaMambaCRA(nn.Module):
             
         self.pos_emb = nn.Parameter(torch.randn(1, 1024, dim) * 0.02)
 
-        # Tùy chọn giữa text encoder kiểu Mamba và CoCa
-        self.use_coca_text_encoder = use_coca_text_encoder
+
         
-        if not use_coca_text_encoder:
-            # Sử dụng Mamba làm text encoder (phiên bản cũ)
-            self.text_encoder = nn.Sequential(
-                nn.LayerNorm(dim),
-                Mamba(
-                    d_model=dim,
-                    d_state=d_state,
-                    d_conv=d_conv,
-                    expand=expand,   
-                ),
-                nn.LayerNorm(dim)
-            )
-        else:
-            # Sử dụng ParallelTransformerBlock từ CoCa làm text encoder
-            self.text_encoder_norm = nn.LayerNorm(dim)
-            
-            # Unimodal layers với ParallelTransformerBlock như trong CoCa
-            self.unimodal_layers = nn.ModuleList([])
-            for _ in range(text_layers):
-                self.unimodal_layers.append(
-                    Residual(ParallelTransformerBlock(
-                        dim=dim, 
-                        dim_head=dim // num_heads, 
-                        heads=num_heads,
-                        ff_mult=4
-                    ))
-                )
-            
-            print(f"Khởi tạo text encoder CoCa với {text_layers} layers")
+        self.text_encoder = nn.Sequential(
+            nn.LayerNorm(dim),
+            Mamba(
+                d_model=dim,
+                d_state=d_state,
+                d_conv=d_conv,
+                expand=expand,   
+            ),
+            nn.LayerNorm(dim)
+        )
+
+
+        # # Thay đổi text_encoder để có nhiều layer Mamba
+        # text_encoder_layers = []
+        # print(text_layers)
+        # # Layer đầu tiên với LayerNorm
+        # text_encoder_layers.append(nn.LayerNorm(dim))
+        
+        # # Thêm nhiều layer Mamba với residual connections
+        # for _ in range(text_layers):
+        #     text_encoder_layers.append(
+        #         nn.Sequential(
+        #             nn.LayerNorm(dim),
+        #             Mamba(
+        #                 d_model=dim,
+        #                 d_state=d_state,
+        #                 d_conv=d_conv,
+        #                 expand=expand,
+        #         ),
+        #         nn.LayerNorm(dim)
+        #     ))
+        # self.text_encoder = nn.Sequential(*text_encoder_layers)
+        
         
         # Thêm Cross-Region Attention để kết nối image-text regions
         self.cross_region_attention = CrossRegionAttention(
@@ -399,29 +260,9 @@ class AnatomaMambaCRA(nn.Module):
             nn.init.zeros_(module.bias)
     
     def encode_text(self, text):
-        """Mã hóa text cho contrastive learning với hai loại encoder"""
-        # Embedding + positional
+        """Mã hóa text cho contrastive learning"""
         x = self.token_emb(text) + self.pos_emb[:, :text.shape[1]]
-        
-        if not self.use_coca_text_encoder:
-            # Sử dụng Mamba text encoder
-            return self.text_encoder(x)
-        else:
-            # Sử dụng CoCa text encoder (ParallelTransformerBlock)
-            batch = text.shape[0]
-            
-            # Tạo attention mask nếu cần
-            # Non-causal attention mask (bidirectional) - khác với CoCa gốc
-            attn_mask = None
-            
-            # Đi qua các lớp unimodal
-            for attn_ff in self.unimodal_layers:
-                x = attn_ff(x, attn_mask=attn_mask)
-            
-            # Normalization cuối cùng
-            x = self.text_encoder_norm(x)
-            
-            return x
+        return self.text_encoder(x)
     
     def create_abnormal_terms_mask(self, text, tokenizer):
         """Tạo mask cho các từ chỉ bất thường trong văn bản"""
@@ -577,6 +418,10 @@ class AnatomaMambaCRA(nn.Module):
         return logits
 
 
+def exists(val):
+    return val is not None
+
+
 def create_anatomamba_cra(
     *,
     image_size=224,
@@ -598,7 +443,6 @@ def create_anatomamba_cra(
     abnormal_terms=None,
     tokenizer=None,
     text_layers=1,
-    use_coca_text_encoder=True,  # Thêm tùy chọn text encoder kiểu CoCa mặc định là True
     **kwargs
 ):
     """Tạo mô hình AnatomaMamba với Cross-Region Attention"""
@@ -632,8 +476,7 @@ def create_anatomamba_cra(
         num_heads=num_heads,
         abnormal_terms=abnormal_terms,
         tokenizer=tokenizer,
-        text_layers=text_layers,
-        use_coca_text_encoder=use_coca_text_encoder
+        text_layers=text_layers
     )
     
     return model

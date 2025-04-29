@@ -13,31 +13,28 @@ class EnhancedTokenizer(object):
         self.ann_path = args.ann_path
         self.threshold = args.threshold
         self.dataset_name = args.dataset_name
+        # Load tokenization config (synonyms, phrases, semantic groups) based on dataset
+        config_dir = os.path.join(os.path.dirname(__file__), 'vocab_info')
+        config_file = os.path.join(config_dir, f"{self.dataset_name}.json")
+        if os.path.exists(config_file):
+            info = json.load(open(config_file))
+            self.synonym_mapping = info.get('synonym_mapping', {})
+            self.medical_phrases = info.get('medical_phrases', {})
+            self.semantic_groups = info.get('semantic_groups', {})
+        else:
+            raise FileNotFoundError(f"Vocabulary config not found: {config_file}")
+        # Assign clean_report based on dataset
         if self.dataset_name == 'siu_xray':
             self.clean_report = self.clean_report_iu_xray
         else:
             self.clean_report = self.clean_report_mimic_cxr
+        # Load annotations
         self.ann = json.loads(open(self.ann_path, 'r').read())
-        
-        # Tạo từ điển đồng nghĩa trước khi xây dựng từ vựng
-        self.synonym_mapping = self.create_synonym_mapping()
-        
-        # Tạo từ điển cụm từ y khoa thường gặp
-        self.medical_phrases = self.extract_common_phrases()
-        
-        # Tạo từ vựng chính
+        # Build vocabulary and embeddings
         self.token2idx, self.idx2token = self.create_vocabulary()
-        
-        # Map ngữ nghĩa cho các từ đồng nghĩa
-        self.semantic_groups = self.create_semantic_groups()
-        
-        # Kích thước vector embedding (phù hợp với mô hình)
-        self.embedding_dim = 512  # Tương ứng với chiều của model embedding
-        
-        # Tạo các vector embedding cho từng token và đảm bảo từ đồng nghĩa có vector gần nhau
+        self.embedding_dim = 512
         self.init_similarity_embeddings()
-        
-        # Lưu thống kê trích xuất từ gts.csv
+        # Optionally analyze existing gts.csv
         try:
             self.analyze_gts_vocabulary(os.path.join(args.save_dir, "gts.csv"))
         except:

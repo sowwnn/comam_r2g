@@ -57,6 +57,9 @@ def get_model_config():
     config['caption_loss_weight'] = 0.5
     config['contrastive_loss_weight'] = 0.3
     config['cross_region_loss_weight'] = 0.2
+
+    config['text_layers'] = 8
+    config['use_coca_text_encoder'] = True  # Sử dụng text encoder kiểu CoCa
     
     return config
 
@@ -65,10 +68,18 @@ def build_model(args, tokenizer, config):
     """
     Xây dựng mô hình AnatomaMamba với Cross-Region Attention
     """
-    # Danh sách từ chỉ bất thường
+
+    # abnormal_terms = [
+    #     'opacity', 'mass', 'nodule', 'abnormal', 'effusion', 'pneumonia',
+    #     'cardiomegaly', 'edema', 'atelectasis', 'consolidation', 'lesion'
+    # ]
+    
     abnormal_terms = [
-        'opacity', 'mass', 'nodule', 'abnormal', 'effusion', 'pneumonia',
-        'cardiomegaly', 'edema', 'atelectasis', 'consolidation', 'lesion'
+        'pneumothorax', 'effusion', 'pleural effusion', 'consolidation', 'opacity', 'opacities',
+        'pneumonia', 'pulmonary edema', 'edema', 'cardiomegaly', 'atelectasis', 'infiltrate',
+        'nodule', 'fracture', 'degenerative', 'thoracic', 'granuloma', 'calcified', 
+        'atherosclerotic', 'hiatal hernia', 'mass', 'lesion', 'fibrosis', 'infection',
+        'calcification', 'hyperinflated', 'emphysema', 'spondylosis'
     ]
     
     # Thêm các tham số đặc thù cho Cross-Region Attention nếu chưa có
@@ -93,13 +104,18 @@ def build_model(args, tokenizer, config):
         max_epochs=config['max_epochs'],
         num_heads=config['num_heads'],
         abnormal_terms=abnormal_terms,
-        tokenizer=tokenizer
+        tokenizer=tokenizer,
+        text_layers=config['text_layers']
     )
 
     # Lưu cấu hình mô hình
     config_path = os.path.join(args.save_dir, 'model_config.json')
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=4)
+
+
+    # weight = torch.load(args.load)
+    # model.load_state_dict(weight['model_state_dict'])
 
     print("Build model AnatomaMamba with Cross-Region Attention successfully")
     return model
@@ -143,7 +159,8 @@ def train_epoch(model, dataloader, scaler, optimizer, scheduler, device, epoch):
             loss = model(
                 text=text,
                 images=images,
-                return_loss=True
+                return_loss=True,
+                # gradient_checkpointing=(len(dataloader) > 100)  # Chỉ áp dụng cho dataset lớn
             )
         
         # Gradient clipping
@@ -154,8 +171,9 @@ def train_epoch(model, dataloader, scaler, optimizer, scheduler, device, epoch):
         scaler.step(optimizer)
         scaler.update()
         total_loss += loss.item()
-        scheduler.step(total_loss) 
-        current_lr = scheduler.get_last_lr()[0]
+        # scheduler.step(total_loss) 
+        # current_lr = scheduler.get_last_lr()[0]
+        # print(loss.item())
         
     return total_loss / len(dataloader)
 
@@ -230,7 +248,7 @@ def main(args):
         optimizer,
         max_lr=1e-4,
         pct_start=0.1,  # 10% đầu tiên là warmup
-        total_steps=args.num_epochs * len(train_dataloader),
+        total_steps=args.num_epochs, # * len(train_dataloader),
         anneal_strategy='cos',
         div_factor=25,  # LR ban đầu = max_lr/25
         final_div_factor=1000  # LR cuối = max_lr/1000
@@ -243,7 +261,7 @@ def main(args):
     for epoch in tqdm(range(num_epochs), desc="Training Progress"):
         # Huấn luyện
         train_loss = train_epoch(model, train_dataloader, scaler, optimizer, scheduler, device, epoch)
-
+        scheduler.step()
         # Đánh giá
         val_loss = validate(model, val_dataloader, scheduler, device)
         

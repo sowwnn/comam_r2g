@@ -13,6 +13,7 @@ import json
 from modules.metrics import compute_scores
 from config.configs import Test_Config
 
+import copy  # for duplicating tokenizer
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -123,36 +124,40 @@ class Tester(BaseTester):
         log = dict()
         self.model.eval()
         with torch.no_grad():
-            test_gts, test_res = [], []
+            # Load raw original reports and clean them (ground-truth, no synonyms)
+            raw_reports = [ex['report'] for ex in self.raw_tokenizer.ann['test']]
+            raw_cleaned = [self.raw_tokenizer.clean_report(r) for r in raw_reports]
+            # Prepare canonical ground-truth for metrics (apply mapping)
+            canonical_gts = []
+            for r in raw_reports:
+                ids = self.tokenizer(r)
+                canonical_gts.append(self.tokenizer.decode(ids))
+            # Collect predictions
+            test_res = []
             for batch in self.test_dataloader:
                 images = batch[1].to(self.device)
                 reports_ids = batch[2].to(self.device)
-                
-                # Sinh báo cáo
+                # Sinh báo cáo (predictions canonical)
                 reports, _ = generate_batch(
                     self.model, images, self.tokenizer, self.device, 
                     max_length=self.args.max_length, 
                     temperature=self.args.temperature
                 )
-                
-                # Giải mã ground truth
-                ground_truths = self.tokenizer.decode_batch(reports_ids[:, 1:].cpu().numpy())
                 test_res.extend(reports)
-                test_gts.extend(ground_truths)
                 
-            # Tính metrics
-            test_met = self.metric_ftns({i: [gt] for i, gt in enumerate(test_gts)},
+            # Compute metrics on canonical tokens
+            test_met = self.metric_ftns({i: [gt] for i, gt in enumerate(canonical_gts)},
                                         {i: [re] for i, re in enumerate(test_res)})
             log.update(**{'test_' + k: v for k, v in test_met.items()})
             print(log)
 
-            # Lưu kết quả
-            test_res, test_gts = pd.DataFrame(test_res), pd.DataFrame(test_gts)
+            # Lưu kết quả: predictions canonical và ground-truth raw cleaned
+            res_df = pd.DataFrame(test_res)
+            gts_df = pd.DataFrame(raw_cleaned)
             res_path = os.path.join(self.save_dir, "res.csv")
             gts_path = os.path.join(self.save_dir, "gts.csv")
-
-            test_res.to_csv(res_path, index=False, header=False)
-            test_gts.to_csv(gts_path, index=False, header=False)
+            res_df.to_csv(res_path, index=False, header=False)
+            gts_df.to_csv(gts_path, index=False, header=False)
             
             return log
 
@@ -167,15 +172,19 @@ def main(args):
     torch.backends.cudnn.benchmark = False
     np.random.seed(args.seed)
 
-    # Tạo tokenizer
-    tokenizer = Tokenizer(args)
+    # Create two tokenizers: one for model predictions (with mapping), one raw for ground-truth cleaning
+    tokenizer_map = Tokenizer(args)
+    # raw tokenizer: disable synonyms and phrase mapping for ground truth only
+    tokenizer_raw = copy.deepcopy(tokenizer_map)
+    tokenizer_raw.synonym_mapping = {}
+    tokenizer_raw.medical_phrases = {}
     
-    # Tạo data loader
-    test_dataloader = R2DataLoader(args, tokenizer, split='test', shuffle=False)
+    # Tạo data loader using raw tokenizer (ground-truth IDs/raw cleaning)
+    test_dataloader = R2DataLoader(args, tokenizer_raw, split='test', shuffle=False)
     
     # Xây dựng model
     model_config = get_model_config()
-    model = build_model(args, tokenizer, model_config)
+    model = build_model(args, tokenizer_map, model_config)
 
     # Load checkpoint
     checkpoint = torch.load(args.load, weights_only=True)
@@ -185,9 +194,11 @@ def main(args):
     # Lấy hàm tính metrics
     metrics = compute_scores
 
-    # Tạo tester và thực hiện test
+    # Tạo tester và thực hiện test (predictions dùng tokenizer_map)
     print(f"Max_len: {args.max_length} | temperature: {args.temperature}")
-    tester = Tester(model, tokenizer, metrics, args, test_dataloader=test_dataloader, device=device)
+    tester = Tester(model, tokenizer_map, metrics, args, test_dataloader=test_dataloader, device=device)
+    # attach raw tokenizer for ground-truth cleaning
+    tester.raw_tokenizer = tokenizer_raw
     results = tester.test()
     
     return results
