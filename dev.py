@@ -2,31 +2,37 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from modules.dataloaders import R2DataLoader
-from modules.tokenizers_enhanced import EnhancedTokenizer as Tokenizer
+from modules.tokenizers import Tokenizer
 import os
 import json
 
 from config.configs import Test_Config
 
 # from vit_pytorch.extractor import Extractor
-from coca_pytorch.coca_pytorch import CoCa
-# from models.coca import CoCa
+
 from lion_pytorch import Lion
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.amp import autocast, GradScaler
 from torch.optim.lr_scheduler import OneCycleLR
 
 # from vit_pytorch.simple_vit_with_patch_dropout import SimpleViT
-# from vit_pytorch.cross_vit import CrossViT
+from vit_pytorch.cross_vit import CrossViT
 # from modules.crossvit import eCrossViT
 # from models.adapt_vit import AdaptiveRegionViT
 # from models.cnext_mam import create_convnext_mamba_coca
 # from models.cnext_mam_2_org import create_convnext_mamba_coca
 # from models.cnext_mam_threshold import create_convnext_mamba_threshold
-from models.cnext_mam_3 import create_convnext_mamba_coca
+
+# from models.cnext_mam_3 import create_convnext_mamba_coca
+from models.cnext_mam import create_convnext_mamba_coca
+from models.coca import Croco
+# from coca_pytorch.coca_pytorch import CoCa
+# from models.coca import CoCa
+
+
 # from models.comamba import create_comamba
-from models.anatomamba import create_anatomamba, small_config, base_config
-from models.anatomamba_cra import create_anatomamba_cra
+# from models.anatomamba import create_anatomamba, small_config, base_config
+# from models.anatomamba_cra import create_anatomamba_cra
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -38,72 +44,36 @@ def set_seed(seed=5401):
     torch.backends.cudnn.benchmark = False
     np.random.seed(seed)
 
-
-def get_model_config():
-    """
-    Trả về cấu hình mô hình AnatomaMamba siêu nhẹ cho dataset nhỏ
-    """
-    # Sử dụng config từ anatomamba.py và điều chỉnh để nhẹ hơn
-    config = base_config.copy()
-    
-    # Giảm kích thước thêm nữa nếu cần
-    config['depths'] = [1, 1, 1, 1]
-    config['dims'] = [64, 128, 256, 512]
-    config['d_state'] = 8
-    config['mamba_dim'] = 512
-    config['decoder_depth'] = 8
-    config['num_heads'] = 8
-
-    config['caption_loss_weight'] = 0.5
-    config['contrastive_loss_weight'] = 0.3
-    config['cross_region_loss_weight'] = 0.2
-    
-    return config
-
-
-def build_model(args, tokenizer, config):
-    """
-    Xây dựng mô hình AnatomaMamba với Cross-Region Attention
-    """
-    # Danh sách từ chỉ bất thường
-    abnormal_terms = [
-        'opacity', 'mass', 'nodule', 'abnormal', 'effusion', 'pneumonia',
-        'cardiomegaly', 'edema', 'atelectasis', 'consolidation', 'lesion'
-    ]
-    
-    # Thêm các tham số đặc thù cho Cross-Region Attention nếu chưa có
-    print(config)
-    
-    # Tạo mô hình với Cross-Region Attention
-    model = create_anatomamba_cra(
-        image_size=config['image_size'],
-        in_chans=config['in_chans'],
-        depths=config['depths'],
-        dims=config['dims'],
-        d_state=config['d_state'],
-        d_conv=config['d_conv'],
-        expand=config['expand'],
-        drop_path_rate=config['drop_path_rate'],
-        mamba_dim=config['mamba_dim'],
-        num_tokens=tokenizer.get_vocab_size() + 4,
-        decoder_depth=config['decoder_depth'],
-        caption_loss_weight=config['caption_loss_weight'],
-        contrastive_loss_weight=config['contrastive_loss_weight'],
-        cross_region_loss_weight=config['cross_region_loss_weight'],
-        max_epochs=config['max_epochs'],
-        num_heads=config['num_heads'],
-        abnormal_terms=abnormal_terms,
-        tokenizer=tokenizer
+def build_model(args, tokenizer):
+    # Giảm độ sâu và kích thước của model
+    convnext_mamba = create_convnext_mamba_coca(
+        image_size = 224,       
+        in_chans = 3,           
+        depths = [1, 1, 1, 1],       
+        dims = [64, 128, 256, 512], 
+        d_state = 4,                
+        d_conv = 4,        
+        expand = 1,                 
+        drop_path_rate = 0.1 
     )
 
-    # Lưu cấu hình mô hình
-    config_path = os.path.join(args.save_dir, 'model_config.json')
-    with open(config_path, 'w') as f:
-        json.dump(config, f, indent=4)
+    convnext_mamba.return_embeddings = True
 
-    print("Build model AnatomaMamba with Cross-Region Attention successfully")
-    return model
+    coca = Croco(
+        dim = 512,                    
+        img_encoder = convnext_mamba,
+        image_dim = 512,             
+        num_tokens = tokenizer.get_vocab_size() + 4,
+        unimodal_depth = 4, 
+        multimodal_depth = 4, 
+        dim_head = 32,
+        heads = 16,                    
+        caption_loss_weight = 2.,
+        contrastive_loss_weight = 1.,
+        region_ann_path=args.region_ann_path
+    )
 
+    return coca
 
 def count_parameters(model):
     """
@@ -134,6 +104,8 @@ def train_epoch(model, dataloader, scaler, optimizer, scheduler, device, epoch):
         model.epoch_tracker = epoch
     
     for idx, batch in enumerate(dataloader):
+    # for idx, batch in tqdm(enumerate(dataloader):
+
         images = batch[1].to(device)
         text = batch[2].to(device)
 
@@ -149,14 +121,17 @@ def train_epoch(model, dataloader, scaler, optimizer, scheduler, device, epoch):
         # Gradient clipping
         scaler.scale(loss).backward()
         scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)  # Giảm max_norm
         
         scaler.step(optimizer)
         scaler.update()
         total_loss += loss.item()
-        scheduler.step(total_loss) 
-        current_lr = scheduler.get_last_lr()[0]
         
+        # Sửa lỗi scheduler.step() không nhận tham số
+        scheduler.step()
+        # if (idx + 1) % 200 == 0:
+            # break
+
     return total_loss / len(dataloader)
 
 
@@ -201,8 +176,7 @@ def main(args):
     os.makedirs(args.save_dir, exist_ok=True)
     
     # Xây dựng mô hình
-    model_config = get_model_config()
-    model = build_model(args, tokenizer, model_config)
+    model = build_model(args, tokenizer)
     
     # Đếm và hiển thị số lượng tham số
     total_params = count_parameters(model)
@@ -243,7 +217,8 @@ def main(args):
     for epoch in tqdm(range(num_epochs), desc="Training Progress"):
         # Huấn luyện
         train_loss = train_epoch(model, train_dataloader, scaler, optimizer, scheduler, device, epoch)
-
+        if (epoch+1) % 5 == 0:
+            _ = train_epoch(model, val_dataloader, scaler, optimizer, scheduler, device, epoch)
         # Đánh giá
         val_loss = validate(model, val_dataloader, scheduler, device)
         

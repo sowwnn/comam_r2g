@@ -149,85 +149,138 @@ class EnhancedTokenizer(object):
         # Ánh xạ từ đồng nghĩa -> từ chuẩn
         # Phân tích từ gts.csv cho thấy các từ này thường được sử dụng thay thế cho nhau
         synonyms = {
-            # Nhóm mô tả tim
-            "cardiomediastinal": "heart",
-            "cardiac": "heart",
-            "cardio": "heart",
-            "cardiovascular": "heart",
-            
-            # Nhóm mô tả phổi
-            "lungs": "lung",
-            "pulmonary": "lung",
-            "airspace": "lung",
-            "lung fields": "lung",
-            
-            # Nhóm mô tả trung thất
-            "mediastinal": "mediastinum",
-            "mediastinal contour": "mediastinum",
-            "mediastinal silhouette": "mediastinum",
-            
-            # Nhóm mô tả các tình trạng bất thường
-            "opacities": "opacity",
-            "opacification": "opacity",
-            "infiltration": "infiltrate",
-            "airspace disease": "infiltrate",
-            "focal airspace disease": "infiltrate",
-            "consolidation": "infiltrate",
-            "pneumonia": "infiltrate",
-            
-            # Cách diễn đạt về "bình thường"
-            "unremarkable": "normal",
-            "within normal limits": "normal",
-            "within limits of normal": "normal",
-            "stable": "normal",
-            "unchanged": "normal",
-            "appear normal": "normal",
-            "appears normal": "normal",
-            "intact": "normal",
-            "grossly normal": "normal",
-            
-            # Cách diễn đạt về "sạch/không có bất thường"
-            "free of": "clear",
-            "without infiltrate": "clear",
-            "without consolidation": "clear", 
-            "without evidence of": "clear",
-            "no evidence of": "clear",
-            "negative for": "clear",
-            
-            # Từ phủ định
-            "without": "no",
-            "absence": "no",
-            "absent": "no",
-            "negative": "no",
-            "not seen": "no",
-            
-            # Từ mô tả cấu trúc
-            "contour": "silhouette", 
-            "contours": "silhouette",
-            "border": "silhouette",
-            "margins": "silhouette",
-            
-            # Cách diễn đạt trạng thái xương
-            "bony": "osseous",
-            "skeletal": "osseous",
-            "rib": "osseous",
-            "thoracic spine": "osseous"
+        "cardiomediastinal": "heart",
+        "cardiac": "heart",
+        "cardio": "heart",
+        "cardiovascular": "heart",
+        "lungs": "lung",
+        "pulmonary": "lung",
+        "airspace": "lung",
+        "lung fields": "lung",
+        "mediastinal": "mediastinum",
+        "mediastinal contour": "mediastinum",
+        "mediastinal silhouette": "mediastinum",
+        "opacities": "opacity",
+        "opacification": "opacity",
+        "infiltration": "infiltrate",
+        "airspace disease": "infiltrate",
+        "focal airspace disease": "infiltrate",
+        "consolidation": "infiltrate",
+        "pneumonia": "infiltrate",
+        "unremarkable": "normal",
+        "within normal limits": "normal",
+        "within limits of normal": "normal",
+        "stable": "normal",
+        "unchanged": "normal",
+        "appear normal": "normal",
+        "appears normal": "normal",
+        "intact": "normal",
+        "grossly normal": "normal",
+        "free of": "clear",
+        "without infiltrate": "clear",
+        "without consolidation": "clear",
+        "without evidence of": "clear",
+        "no evidence of": "clear",
+        "negative for": "clear",
+        "without": "no",
+        "absence": "no",
+        "absent": "no",
+        "negative": "no",
+        "not seen": "no",
+        "contour": "silhouette",
+        "contours": "silhouette",
+        "border": "silhouette",
+        "margins": "silhouette",
+        "bony": "osseous",
+        "skeletal": "osseous",
+        "rib": "osseous",
+        "thoracic spine": "osseous",
+        "heart size is normal": "heart is normal",
+        "heart is normal in size": "heart is normal",
+        "normal heart size": "heart is normal",
+        "heart size appears normal": "heart is normal",
+        "heart size normal": "heart is normal",
+        "normal cardiac size": "heart is normal",
+        "lungs are clear": "lungs are clear",
+        "clear lungs": "lungs are clear",
+        "lung fields are clear": "lungs are clear",
+        "lungs clear": "lungs are clear"
         }
         
         return synonyms
 
     def create_semantic_groups(self):
         """Tạo các nhóm ngữ nghĩa từ dữ liệu phân tích"""
-        semantic_groups = {
-            "heart_terms": ["heart", "cardiac", "cardiomediastinal", "cardiovascular", "silhouette", "contour"],
-            "lung_terms": ["lung", "lungs", "pulmonary", "airspace", "bronchial"],
-            "mediastinum_terms": ["mediastinum", "mediastinal", "hilum", "hilar"],
-            "abnormal_terms": ["opacity", "opacities", "infiltrate", "consolidation", "effusion", 
-                              "pneumothorax", "edema", "mass", "nodule", "atelectasis", "pneumonia"],
-            "normal_terms": ["normal", "unremarkable", "clear", "stable", "intact", "limits"],
-            "negation_terms": ["no", "without", "not", "absence", "negative"],
-            "descriptor_terms": ["focal", "diffuse", "mild", "moderate", "severe", "small", "large", "acute"]
-        }
+        semantic_groups= {
+                "heart_terms": [
+                "heart",
+                "cardiac",
+                "cardiomediastinal",
+                "cardiovascular",
+                "silhouette",
+                "contour"
+                ],
+                "lung_terms": [
+                "lung",
+                "lungs",
+                "pulmonary",
+                "airspace",
+                "bronchial"
+                ],
+                "mediastinum_terms": [
+                "mediastinum",
+                "mediastinal",
+                "hilum",
+                "hilar"
+                ],
+                "abnormal_terms": [
+                "opacity",
+                "opacities",
+                "infiltrate",
+                "consolidation",
+                "effusion",
+                "pneumothorax",
+                "edema",
+                "mass",
+                "nodule",
+                "atelectasis",
+                "pneumonia"
+                ],
+                "normal_terms": [
+                "normal",
+                "unremarkable",
+                "clear",
+                "stable",
+                "intact",
+                "limits"
+                ],
+                "negation_terms": [
+                "no",
+                "without",
+                "not",
+                "absence",
+                "negative"
+                ],
+                "descriptor_terms": [
+                "focal",
+                "diffuse",
+                "mild",
+                "moderate",
+                "severe",
+                "small",
+                "large",
+                "acute"
+                ],
+                "imaging_terms": [
+                "chest",
+                "lateral",
+                "radiograph",
+                "pa"
+                ],
+                "device_terms": [
+                "tube"
+                ]
+            }
         
         return semantic_groups
 
@@ -235,20 +288,60 @@ class EnhancedTokenizer(object):
         """Trích xuất các cụm từ thường gặp dựa trên dữ liệu"""
         # Các cụm từ phổ biến và biến thể của chúng (phân tích từ gts.csv)
         common_phrases = {
-            "heart size is normal": ["normal heart size", "heart is normal in size", 
-                                    "normal sized heart", "heart size normal"],
-            "lungs are clear": ["clear lungs", "lung fields are clear", "both lungs are clear", 
-                              "lungs clear", "no focal airspace opacity", "no focal consolidation"],
-            "no pleural effusion": ["without pleural effusion", "no effusion", "no evidence of pleural effusion", 
-                                  "no pleural fluid", "absence of pleural fluid"],
-            "no pneumothorax": ["without pneumothorax", "pneumothorax is absent", "no evidence of pneumothorax"],
-            "within normal limits": ["normal", "unremarkable", "within normal parameters", "within normal range"],
-            "no evidence of": ["without", "negative for", "no sign of", "no finding of", "absent"],
-            "bony structures are intact": ["osseous structures are intact", "no acute bony abnormality",
-                                         "no fracture", "visualized osseous structures appear intact"],
-            "cardiomediastinal silhouette is normal": ["normal cardiomediastinal silhouette", 
-                                                     "cardiomediastinal contours are normal"]
-        }
+    "heart size is normal": [
+      "normal heart size",
+      "heart is normal in size",
+      "normal sized heart",
+      "heart size normal",
+      "heart size is normal",
+      "heart size appears normal"
+    ],
+    "lungs are clear": [
+      "clear lungs",
+      "lung fields are clear",
+      "both lungs are clear",
+      "lungs clear",
+      "no focal airspace opacity",
+      "no focal consolidation",
+      "lungs are clear"
+    ],
+    "no pleural effusion": [
+      "without pleural effusion",
+      "no effusion",
+      "no evidence of pleural effusion",
+      "no pleural fluid",
+      "absence of pleural fluid",
+      "no pleural effusion"
+    ],
+    "no pneumothorax": [
+      "without pneumothorax",
+      "pneumothorax is absent",
+      "no evidence of pneumothorax"
+    ],
+    "within normal limits": [
+      "normal",
+      "unremarkable",
+      "within normal parameters",
+      "within normal range"
+    ],
+    "no evidence of": [
+      "without",
+      "negative for",
+      "no sign of",
+      "no finding of",
+      "absent"
+    ],
+    "bony structures are intact": [
+      "osseous structures are intact",
+      "no acute bony abnormality",
+      "no fracture",
+      "visualized osseous structures appear intact"
+    ],
+    "cardiomediastinal silhouette is normal": [
+      "normal cardiomediastinal silhouette",
+      "cardiomediastinal contours are normal"
+    ]
+  }
         
         return common_phrases
 

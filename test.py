@@ -4,10 +4,12 @@ import numpy as np
 from modules.tester import BaseTester
 import os
 import pandas as pd
-from dev import build_model, get_model_config
+from dev import build_model
 from tqdm import tqdm
 from modules.dataloaders import R2DataLoader
-from modules.tokenizers_enhanced import EnhancedTokenizer as Tokenizer
+# from modules.tokenizers_enhanced import EnhancedTokenizer as Tokenizer
+from modules.tokenizers import Tokenizer
+
 import json
 
 from modules.metrics import compute_scores
@@ -174,8 +176,8 @@ def main(args):
     test_dataloader = R2DataLoader(args, tokenizer, split='test', shuffle=False)
     
     # Xây dựng model
-    model_config = get_model_config()
-    model = build_model(args, tokenizer, model_config)
+    # model_config = get_model_config()
+    model = build_model(args, tokenizer)
 
     # Load checkpoint
     checkpoint = torch.load(args.load, weights_only=True)

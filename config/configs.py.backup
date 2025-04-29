@@ -10,19 +10,18 @@ class Test_Config():
 
     image_dir = "/home/sowwn/Workspace/ws/2025/Dataset/MIMIC-CXR/mimic_cxr/images"
     ann_path = "/home/sowwn/Workspace/ws/2025/Dataset/MIMIC-CXR/mimic_cxr/annotations.json"
-    region_ann_path = "utils/anatomical_token_groups.json"
-
+    # ann_path = "/mnt/e/Sho/mimic_cxr/aug_annotation.json"
     dataset_name = "mimic_cxr"
-    max_seq_length = 80
-    threshold = 3
+    max_seq_length = 100
+    threshold = 1
     max_length = 64
-    temperature = 0.3
+    temperature = 0.9
 
-    batch_size = 64
+    batch_size = 128
     num_workers = 12
     transform = None
     learning_rate = 1e-4
-    num_epochs = 50
+    num_epochs = 100
     seed = 5401
 
     

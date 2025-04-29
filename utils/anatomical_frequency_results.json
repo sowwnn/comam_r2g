@@ -1,0 +1,128 @@
+{
+    "overall": {
+        "total_reports": 160154,
+        "absolute_frequency": {
+            "effusion": 146338,
+            "pleural": 139158,
+            "cardiomediastinal": 125612,
+            "mediastinal": 55677,
+            "osseous": 53751,
+            "tube": 47110,
+            "vascular": 33967,
+            "aorta": 19960,
+            "hemidiaphragm": 17786,
+            "stomach": 16339,
+            "chest wall": 9818,
+            "trachea": 3840
+        },
+        "percentage": {
+            "effusion": 91.37330319567415,
+            "pleural": 86.89011826117363,
+            "cardiomediastinal": 78.43200919115351,
+            "mediastinal": 34.76466401088952,
+            "osseous": 33.56207150617531,
+            "tube": 29.415437641270277,
+            "vascular": 21.208961374676875,
+            "aorta": 12.463004358305131,
+            "hemidiaphragm": 11.105560897636026,
+            "stomach": 10.202055521560498,
+            "chest wall": 6.130349538569127,
+            "trachea": 2.3976922212370595
+        }
+    },
+    "splits": {
+        "train": {
+            "total_reports": 156687,
+            "absolute_frequency": {
+                "effusion": 143175,
+                "pleural": 136032,
+                "cardiomediastinal": 123109,
+                "mediastinal": 54529,
+                "osseous": 52759,
+                "tube": 45768,
+                "vascular": 33144,
+                "aorta": 19512,
+                "hemidiaphragm": 17445,
+                "stomach": 15959,
+                "chest wall": 9582,
+                "trachea": 3765
+            },
+            "percentage": {
+                "effusion": 91.3764383771468,
+                "pleural": 86.81766834517222,
+                "cardiomediastinal": 78.57001538098247,
+                "mediastinal": 34.8012279257373,
+                "osseous": 33.67158730462642,
+                "tube": 29.209825958758547,
+                "vascular": 21.152999291581306,
+                "aorta": 12.452851863907025,
+                "hemidiaphragm": 11.133661375863984,
+                "stomach": 10.185273826162987,
+                "chest wall": 6.115376514962952,
+                "trachea": 2.4028796262612726
+            }
+        },
+        "val": {
+            "total_reports": 1226,
+            "absolute_frequency": {
+                "effusion": 1105,
+                "pleural": 1074,
+                "cardiomediastinal": 955,
+                "mediastinal": 433,
+                "osseous": 388,
+                "tube": 349,
+                "vascular": 266,
+                "aorta": 157,
+                "hemidiaphragm": 129,
+                "stomach": 128,
+                "chest wall": 59,
+                "trachea": 30
+            },
+            "percentage": {
+                "effusion": 90.1305057096248,
+                "pleural": 87.60195758564437,
+                "cardiomediastinal": 77.89559543230015,
+                "mediastinal": 35.31810766721044,
+                "osseous": 31.64763458401305,
+                "tube": 28.466557911908648,
+                "vascular": 21.69657422512235,
+                "aorta": 12.805872756933114,
+                "hemidiaphragm": 10.522022838499185,
+                "stomach": 10.440456769983687,
+                "chest wall": 4.8123980424143555,
+                "trachea": 2.4469820554649266
+            }
+        },
+        "test": {
+            "total_reports": 2241,
+            "absolute_frequency": {
+                "effusion": 2058,
+                "pleural": 2052,
+                "cardiomediastinal": 1548,
+                "tube": 993,
+                "mediastinal": 715,
+                "osseous": 604,
+                "vascular": 557,
+                "aorta": 291,
+                "stomach": 252,
+                "hemidiaphragm": 212,
+                "chest wall": 177,
+                "trachea": 45
+            },
+            "percentage": {
+                "effusion": 91.83400267737618,
+                "pleural": 91.56626506024097,
+                "cardiomediastinal": 69.07630522088354,
+                "tube": 44.310575635876845,
+                "mediastinal": 31.905399375278893,
+                "osseous": 26.952253458277553,
+                "vascular": 24.854975457385095,
+                "aorta": 12.985274431057563,
+                "stomach": 11.244979919678714,
+                "hemidiaphragm": 9.460062472110666,
+                "chest wall": 7.898259705488621,
+                "trachea": 2.0080321285140563
+            }
+        }
+    }
+}

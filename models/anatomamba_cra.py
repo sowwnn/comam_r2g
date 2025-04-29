@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 from mamba_ssm import Mamba
 from models.cnext_mam_3 import create_convnext_mamba_coca, DyT
-from models.cross_region_attention import CrossRegionAttention, cross_region_loss, detect_abnormal_regions
+from models.cross_region_attention import CrossRegionAttention
 
 
 class MedicalAttentionGate(nn.Module):
@@ -132,16 +132,11 @@ class AnatomaMambaCRA(nn.Module):
         temperature=0.07,
         max_epochs=50,
         num_heads=8,
-        abnormal_terms=None,
         tokenizer=None
     ):
         super().__init__()
         
-        # Danh sách từ chỉ bất thường
-        self.abnormal_terms = abnormal_terms or [
-            'opacity', 'mass', 'nodule', 'abnormal', 'effusion', 'pneumonia',
-            'cardiomegaly', 'edema', 'atelectasis', 'consolidation', 'lesion'
-        ]
+        # Bỏ phần abnormal_terms
         
         # Lưu trữ tokenizer để sử dụng
         self.tokenizer = tokenizer
@@ -181,18 +176,21 @@ class AnatomaMambaCRA(nn.Module):
         # Text encoder đơn giản cho contrastive learning
         self.token_emb = nn.Embedding(num_tokens, dim)
         
-        # Nếu tokenizer được cung cấp và có embedding matrix, khởi tạo token_emb từ đó
-        if exists(tokenizer) and hasattr(tokenizer, 'get_embedding_matrix'):
-            pretrained_embeddings = tokenizer.get_embedding_matrix()
-            # Chỉ sao chép embedding cho các token có trong từ điển (theo ID)
-            with torch.no_grad():
-                for token, idx in tokenizer.token2idx.items():
-                    if idx < self.token_emb.weight.shape[0]:
-                        self.token_emb.weight[idx] = torch.tensor(pretrained_embeddings[idx], dtype=self.token_emb.weight.dtype)
-            # Lưu thông báo
-            print("Đã khởi tạo token embeddings từ tokenizer với các vector đã căn chỉnh.")
-            
-        self.pos_emb = nn.Parameter(torch.randn(1, 1024, dim) * 0.02)
+        # Thay thế pos_emb đơn giản bằng Transformer
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=dim,
+            nhead=num_heads,
+            dim_feedforward=dim*2,
+            dropout=dropout,
+            batch_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=2,  # Sử dụng 2 lớp transformer
+            norm=nn.LayerNorm(dim)
+        )
+        
+        # Giữ lại text_encoder với Mamba
         self.text_encoder = nn.Sequential(
             nn.LayerNorm(dim),
             Mamba(
@@ -208,7 +206,8 @@ class AnatomaMambaCRA(nn.Module):
         self.cross_region_attention = CrossRegionAttention(
             dim=dim,
             num_heads=num_heads,
-            dropout=dropout
+            dropout=dropout,
+            region_ann_path=getattr(self, 'region_ann_path', None)
         )
         
         # Decoder model
@@ -238,9 +237,17 @@ class AnatomaMambaCRA(nn.Module):
             nn.init.zeros_(module.bias)
     
     def encode_text(self, text):
-        """Mã hóa text cho contrastive learning"""
-        x = self.token_emb(text) + self.pos_emb[:, :text.shape[1]]
-        return self.text_encoder(x)
+        """Mã hóa text qua Transformer và Mamba"""
+        # Token embedding
+        x = self.token_emb(text)
+        
+        # Xử lý qua transformer
+        x = self.transformer_encoder(x)
+        
+        # Tiếp tục xử lý qua Mamba
+        x = self.text_encoder(x)
+        
+        return x
     
     def create_abnormal_terms_mask(self, text, tokenizer):
         """Tạo mask cho các từ chỉ bất thường trong văn bản"""
@@ -290,14 +297,11 @@ class AnatomaMambaCRA(nn.Module):
         text_emb = self.encode_text(text)  # [batch, seq_len, dim]
         
         # Áp dụng Cross-Region Attention giữa các vùng hình ảnh và tokens văn bản
-        enhanced_img, enhanced_text, img_to_text_attn, text_to_img_attn = self.cross_region_attention(
-            img_emb, text_emb
+        enhanced_img, enhanced_text, img_embed, text_embed, img_to_text_attn, text_to_img_attn = self.cross_region_attention(
+            img_regions=img_emb, 
+            text_tokens=text_emb,
+            text_token_ids=text
         )
-        
-        # Tạo mask cho các từ bất thường nếu có tokenizer
-        abnormal_terms_mask = None
-        if tokenizer is not None:
-            abnormal_terms_mask = self.create_abnormal_terms_mask(text, tokenizer)
         
         if return_embedding:
             # Trả về embeddings sau cross-region attention
@@ -312,17 +316,9 @@ class AnatomaMambaCRA(nn.Module):
             
         if return_attention_maps:
             # Trả về attention maps để phân tích và trực quan hóa
-            # Detect abnormal regions if tokenizer provided
-            abnormal_regions = None
-            if tokenizer is not None:
-                abnormal_regions = detect_abnormal_regions(
-                    enhanced_img, text, text_to_img_attn, tokenizer, self.abnormal_terms
-                )
-            
             return {
                 'img_to_text_attn': img_to_text_attn,  # [batch, heads, 49, seq_len]
                 'text_to_img_attn': text_to_img_attn,  # [batch, heads, seq_len, 49]
-                'abnormal_regions': abnormal_regions    # [batch, 7, 7] or None
             }
         
         if return_loss:
@@ -358,30 +354,23 @@ class AnatomaMambaCRA(nn.Module):
             contrastive_loss_t2i = F.cross_entropy(sim_t2i, labels)
             contrastive_loss = (contrastive_loss_i2t + contrastive_loss_t2i) / 2
             
-            # Cross-Region Attention loss
-            cra_loss = cross_region_loss(
-                img_to_text_attn, text_to_img_attn, abnormal_terms_mask
-            )
-            
             # Dynamic caption weight dựa trên epoch
             dynamic_caption_weight = self.caption_loss_weight * min(1.5, 1.0 + 0.5 * self.epoch_tracker / self.max_epochs)
             
-            # Cân bằng gradient tốt hơn
+            # Chỉ còn 2 thành phần loss
             loss_weights = {
                 'contrastive': self.contrastive_loss_weight,
-                'caption': dynamic_caption_weight,
-                'cross_region': self.cross_region_loss_weight
+                'caption': dynamic_caption_weight
             }
             
             # Chuẩn hóa weights tổng bằng 1
             weight_sum = sum(loss_weights.values()) + 1e-8
             loss_weights = {k: v/weight_sum for k, v in loss_weights.items()}
             
-            # Tính loss với weights chuẩn hóa
+            # Tính loss không còn cross_region_loss
             loss = (
                 loss_weights['contrastive'] * contrastive_loss + 
-                loss_weights['caption'] * caption_loss +
-                loss_weights['cross_region'] * cra_loss
+                loss_weights['caption'] * caption_loss
             )
             
             return loss
@@ -418,7 +407,6 @@ def create_anatomamba_cra(
     cross_region_loss_weight=0.5,
     max_epochs=50,
     num_heads=8,
-    abnormal_terms=None,
     tokenizer=None,
     **kwargs
 ):
@@ -451,7 +439,6 @@ def create_anatomamba_cra(
         cross_region_loss_weight=cross_region_loss_weight,
         max_epochs=max_epochs,
         num_heads=num_heads,
-        abnormal_terms=abnormal_terms,
         tokenizer=tokenizer
     )
     

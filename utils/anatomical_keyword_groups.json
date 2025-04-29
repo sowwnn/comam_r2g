@@ -1,0 +1,109 @@
+{
+    "pleural": [
+        "lung",
+        "pulmonary",
+        "hilar",
+        "bronchovascular",
+        "parenchyma",
+        "interstitial",
+        "airspace",
+        "pleural",
+        "pleura",
+        "lobe",
+        "lingula",
+        "apex",
+        "apices",
+        "base"
+    ],
+    "effusion": [
+        "opacity",
+        "consolidation",
+        "effusion",
+        "edema",
+        "atelectasis",
+        "pneumothorax",
+        "nodule",
+        "mass",
+        "lesion",
+        "density",
+        "scarring",
+        "fibrosis",
+        "calcification"
+    ],
+    "mediastinal": [
+        "mediastinum",
+        "mediastinal"
+    ],
+    "cardiomediastinal": [
+        "heart",
+        "cardiac",
+        "cardiomediastinal",
+        "pericardial"
+    ],
+    "tube": [
+        "tube",
+        "line",
+        "catheter",
+        "pacemaker",
+        "device",
+        "hardware",
+        "clip",
+        "valve",
+        "stent",
+        "wire",
+        "drain"
+    ],
+    "osseous": [
+        "bone",
+        "osseous",
+        "rib",
+        "spine",
+        "vertebra",
+        "vertebral",
+        "thoracic",
+        "clavicle",
+        "sternum",
+        "scapula",
+        "costal",
+        "costophrenic"
+    ],
+    "vascular": [
+        "vascular",
+        "vasculature",
+        "vessel",
+        "artery",
+        "vein"
+    ],
+    "hemidiaphragm": [
+        "diaphragm",
+        "hemidiaphragm",
+        "subphrenic"
+    ],
+    "aorta": [
+        "aorta",
+        "aortic"
+    ],
+    "stomach": [
+        "abdomen",
+        "abdominal",
+        "bowel",
+        "hepatic",
+        "splenic",
+        "stomach",
+        "gastric"
+    ],
+    "chest wall": [
+        "soft tissue",
+        "subcutaneous",
+        "axilla",
+        "axillary",
+        "breast",
+        "chest wall"
+    ],
+    "trachea": [
+        "neck",
+        "trachea",
+        "thyroid",
+        "carotid"
+    ]
+}
