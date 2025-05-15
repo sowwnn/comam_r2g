@@ -4,10 +4,11 @@ import numpy as np
 from modules.tester import BaseTester
 import os
 import pandas as pd
-from dev import build_model, get_model_config
+from dev import build_model
 from tqdm import tqdm
 from modules.dataloaders import R2DataLoader
-from modules.tokenizers_enhanced import EnhancedTokenizer as Tokenizer
+# from modules.tokenizers_enhanced import EnhancedTokenizer as Tokenizer
+from modules.tokenizers import Tokenizer
 import json
 
 from modules.metrics import compute_scores
@@ -17,7 +18,7 @@ from config.configs import Test_Config
 import warnings
 warnings.filterwarnings("ignore")
 
-def generate_batch(model, images, tokenizer, device, max_length=150, temperature=1.0, min_length=30, repeat_penalty=1.5, top_p=0.9):
+def generate_batch(model, images, tokenizer, device, max_length=150, temperature=1.0):
     """
     Hàm sinh báo cáo X-quang sử dụng mô hình AnatomaMamba
     """
@@ -31,11 +32,6 @@ def generate_batch(model, images, tokenizer, device, max_length=150, temperature
     
     # Token bắt đầu câu
     generated = torch.zeros((batch_size, 1), dtype=torch.long, device=device)
-    
-    # Các tham số sinh văn bản
-    
-    # Lưu token đã sinh cho mỗi batch
-    prev_tokens = [[] for _ in range(batch_size)]
     
     # Flags để theo dõi trạng thái sinh
     finished = [False] * batch_size
@@ -54,49 +50,22 @@ def generate_batch(model, images, tokenizer, device, max_length=150, temperature
             next_token_logits = outputs[:, -1, :vocab_size]
             next_token_logits = next_token_logits / temperature
             
-            # Phạt lặp lại tokens
-            for idx in range(batch_size):
-                for prev_token in prev_tokens[idx]:
-                    next_token_logits[idx, prev_token] /= repeat_penalty
-            
-            # Top-p (nucleus) sampling
-            sorted_logits, sorted_indices = torch.sort(next_token_logits, descending=True, dim=-1)
-            cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-            
-            # Tạo mask cho tokens trong top-p
-            sorted_indices_to_remove = cumulative_probs > top_p
-            sorted_indices_to_remove[:, 1:] = sorted_indices_to_remove[:, :-1].clone()
-            sorted_indices_to_remove[:, 0] = 0
-            
-            # Áp dụng mask và lấy token tiếp theo
-            for idx in range(batch_size):
-                indices_to_remove = sorted_indices[idx][sorted_indices_to_remove[idx]]
-                next_token_logits[idx, indices_to_remove] = -float('Inf')
-            
+            # Sample next token with temperature
             next_token_probs = F.softmax(next_token_logits, dim=-1)
             next_tokens = torch.multinomial(next_token_probs, num_samples=1).squeeze(-1)
-            
-            # Ngăn chặn token EOS nếu chưa đạt độ dài tối thiểu
-            if i < min_length:
-                next_tokens = torch.where(next_tokens == end_token_id, 
-                                        torch.randint(1, vocab_size, (batch_size,), device=device),
-                                        next_tokens)
             
             # Lưu lại token đã sinh
             for idx in range(batch_size):
                 if not finished[idx]:
                     token = next_tokens[idx].item()
-                    prev_tokens[idx].append(token)
-                    
-                    # Kiểm tra nếu đã sinh EOS sau min_length
-                    if i >= min_length and token == end_token_id:
+                    if token == end_token_id:
                         finished[idx] = True
             
             # Thêm vào chuỗi đã sinh
             generated = torch.cat([generated, next_tokens.unsqueeze(1)], dim=1)
             
             # Kiểm tra nếu tất cả các batch đã hoàn thành
-            if all(finished) and i >= min_length:
+            if all(finished):
                 break
     
     # Chuyển về numpy để giải mã
@@ -139,6 +108,7 @@ class Tester(BaseTester):
                 ground_truths = self.tokenizer.decode_batch(reports_ids[:, 1:].cpu().numpy())
                 test_res.extend(reports)
                 test_gts.extend(ground_truths)
+
                 
             # Tính metrics
             test_met = self.metric_ftns({i: [gt] for i, gt in enumerate(test_gts)},
@@ -174,8 +144,8 @@ def main(args):
     test_dataloader = R2DataLoader(args, tokenizer, split='test', shuffle=False)
     
     # Xây dựng model
-    model_config = get_model_config()
-    model = build_model(args, tokenizer, model_config)
+    # model_config = get_model_config()
+    model = build_model(args, tokenizer)
 
     # Load checkpoint
     checkpoint = torch.load(args.load, weights_only=True)

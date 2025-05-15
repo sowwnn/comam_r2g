@@ -2,31 +2,21 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from modules.dataloaders import R2DataLoader
-from modules.tokenizers_enhanced import EnhancedTokenizer as Tokenizer
+# from modules.tokenizers_enhanced import EnhancedTokenizer as Tokenizer
+from modules.tokenizers import Tokenizer
 import os
 import json
 
 from config.configs import Test_Config
 
-# from vit_pytorch.extractor import Extractor
-from coca_pytorch.coca_pytorch import CoCa
-# from models.coca import CoCa
 from lion_pytorch import Lion
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.amp import autocast, GradScaler
 from torch.optim.lr_scheduler import OneCycleLR
 
-# from vit_pytorch.simple_vit_with_patch_dropout import SimpleViT
-# from vit_pytorch.cross_vit import CrossViT
-# from modules.crossvit import eCrossViT
-# from models.adapt_vit import AdaptiveRegionViT
-# from models.cnext_mam import create_convnext_mamba_coca
-# from models.cnext_mam_2_org import create_convnext_mamba_coca
-# from models.cnext_mam_threshold import create_convnext_mamba_threshold
 from models.cnext_mam_3 import create_convnext_mamba_coca
-# from models.comamba import create_comamba
-from models.anatomamba import create_anatomamba, small_config, base_config
-from models.anatomamba_cra import create_anatomamba_cra
+from models.gate_attention_contrastive import GateAttentionContrastive
+
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -39,71 +29,32 @@ def set_seed(seed=5401):
     np.random.seed(seed)
 
 
-def get_model_config():
-    """
-    Trả về cấu hình mô hình AnatomaMamba siêu nhẹ cho dataset nhỏ
-    """
-    # Sử dụng config từ anatomamba.py và điều chỉnh để nhẹ hơn
-    config = base_config.copy()
-    
-    # Giảm kích thước thêm nữa nếu cần
-    config['depths'] = [1, 1, 1, 1]
-    config['dims'] = [64, 128, 256, 512]
-    config['d_state'] = 8
-    config['mamba_dim'] = 512
-    config['decoder_depth'] = 8
-    config['num_heads'] = 8
 
-    config['caption_loss_weight'] = 0.5
-    config['contrastive_loss_weight'] = 0.3
-    config['cross_region_loss_weight'] = 0.2
-    
-    return config
+def build_model(args, tokenizer):
 
-
-def build_model(args, tokenizer, config):
-    """
-    Xây dựng mô hình AnatomaMamba với Cross-Region Attention
-    """
-    # Danh sách từ chỉ bất thường
-    abnormal_terms = [
-        'opacity', 'mass', 'nodule', 'abnormal', 'effusion', 'pneumonia',
-        'cardiomegaly', 'edema', 'atelectasis', 'consolidation', 'lesion'
-    ]
-    
-    # Thêm các tham số đặc thù cho Cross-Region Attention nếu chưa có
-    print(config)
-    
-    # Tạo mô hình với Cross-Region Attention
-    model = create_anatomamba_cra(
-        image_size=config['image_size'],
-        in_chans=config['in_chans'],
-        depths=config['depths'],
-        dims=config['dims'],
-        d_state=config['d_state'],
-        d_conv=config['d_conv'],
-        expand=config['expand'],
-        drop_path_rate=config['drop_path_rate'],
-        mamba_dim=config['mamba_dim'],
-        num_tokens=tokenizer.get_vocab_size() + 4,
-        decoder_depth=config['decoder_depth'],
-        caption_loss_weight=config['caption_loss_weight'],
-        contrastive_loss_weight=config['contrastive_loss_weight'],
-        cross_region_loss_weight=config['cross_region_loss_weight'],
-        max_epochs=config['max_epochs'],
-        num_heads=config['num_heads'],
-        abnormal_terms=abnormal_terms,
-        tokenizer=tokenizer
+    encoder = create_convnext_mamba_coca(
+        image_size=224,
+        in_chans=3,
+        depths=[1, 1, 1, 1],
+        dims=[64, 128, 256, 512],
+        d_state=16,
     )
 
-    # Lưu cấu hình mô hình
-    config_path = os.path.join(args.save_dir, 'model_config.json')
-    with open(config_path, 'w') as f:
-        json.dump(config, f, indent=4)
+    model = GateAttentionContrastive(
+        dim = 512,                    
+        img_encoder = encoder,
+        image_dim = 512,             
+        num_tokens = tokenizer.get_vocab_size() + 4,
+        unimodal_depth = 8, 
+        multimodal_depth = 4, 
+        dim_head = 32,
+        heads = 16,                    
+        caption_loss_weight = 1.,
+        contrastive_loss_weight = 1.,
+    )
 
-    print("Build model AnatomaMamba with Cross-Region Attention successfully")
     return model
-
+        
 
 def count_parameters(model):
     """
@@ -154,8 +105,40 @@ def train_epoch(model, dataloader, scaler, optimizer, scheduler, device, epoch):
         scaler.step(optimizer)
         scaler.update()
         total_loss += loss.item()
-        scheduler.step(total_loss) 
+        scheduler.step() 
         current_lr = scheduler.get_last_lr()[0]
+        
+    return total_loss / len(dataloader)
+
+def train_epoch_(model, dataloader, scaler, optimizer, scheduler, device, epoch):
+    model.train()
+    total_loss = 0
+    
+    # Cập nhật epoch hiện tại cho model
+    if hasattr(model, 'epoch_tracker'):
+        model.epoch_tracker = epoch
+    
+    for idx, batch in enumerate(dataloader):
+        images = batch[1].to(device)
+        text = batch[2].to(device)
+
+        optimizer.zero_grad()
+
+        with autocast('cuda'):
+            loss = model(
+                text=text,
+                images=images,
+                return_loss=True
+            )
+        
+        # Gradient clipping
+        scaler.scale(loss).backward()
+        scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+        
+        scaler.step(optimizer)
+        scaler.update()
+        total_loss += loss.item()
         
     return total_loss / len(dataloader)
 
@@ -193,48 +176,53 @@ def main(args):
     # Tạo dataloaders
     train_dataloader = R2DataLoader(args, tokenizer, split='train', shuffle=True)
     val_dataloader = R2DataLoader(args, tokenizer, split='val', shuffle=False)
+    _dataloader = R2DataLoader(args, tokenizer, split='test', shuffle=False)
 
-    # Khởi tạo GradScaler cho mixed precision
+
     scaler = GradScaler()
-
-    # Tạo thư mục lưu mô hình
     os.makedirs(args.save_dir, exist_ok=True)
     
-    # Xây dựng mô hình
-    model_config = get_model_config()
-    model = build_model(args, tokenizer, model_config)
-    
-    # Đếm và hiển thị số lượng tham số
+    model = build_model(args, tokenizer)
+
+
     total_params = count_parameters(model)
     print(f"\nKích thước mô hình: {total_params/1e6:.2f}M tham số")
     
     model = model.to(device)
     
-    # Thiết lập optimizer
-    # optimizer = torch.optim.AdamW(
-    #     model.parameters(), 
-    #     lr=args.learning_rate, 
-    #     weight_decay=0.05,
-    #     betas=(0.9, 0.999)
-    # )
-    optimizer = Lion(
-        model.parameters(),
-        lr=1e-4,           # Sử dụng LR thấp hơn AdamW 3x
-        weight_decay=1e-2,
-        betas=(0.9, 0.99)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), 
+        lr=args.learning_rate, 
+        weight_decay=0.05,
+        betas=(0.9, 0.999)
     )
+    # optimizer = Lion(
+    #     model.parameters(),
+    #     lr=1e-4,           # Sử dụng LR thấp hơn AdamW 3x
+    #     weight_decay=1e-2,
+    #     betas=(0.9, 0.99)
+    # )
 
     # Thiết lập scheduler với warmup
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.num_epochs * len(train_dataloader), eta_min=1e-6)
-    scheduler = OneCycleLR(
-        optimizer,
-        max_lr=1e-4,
-        pct_start=0.1,  # 10% đầu tiên là warmup
-        total_steps=args.num_epochs * len(train_dataloader),
-        anneal_strategy='cos',
-        div_factor=25,  # LR ban đầu = max_lr/25
-        final_div_factor=1000  # LR cuối = max_lr/1000
-    )
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.num_epochs * len(train_dataloader), eta_min=1e-6)
+    # scheduler = OneCycleLR(
+    #     optimizer,
+    #     max_lr=1e-4,
+    #     pct_start=0.1,  # 10% đầu tiên là warmup
+    #     total_steps=args.num_epochs * len(train_dataloader),
+    #     anneal_strategy='cos',
+    #     div_factor=25,  # LR ban đầu = max_lr/25
+    #     final_div_factor=1000  # LR cuối = max_lr/1000
+    # )
+
+
+    # checkpoint = torch.load(args.load, weights_only=True)
+    # model.load_state_dict(checkpoint['model_state_dict'])
+    # model = model.to(device)
+    # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    # epoch = checkpoint['epoch']
+    # best_val_loss = checkpoint['val_loss']
+    # train_loss = checkpoint['train_loss']
 
     # Vòng lặp huấn luyện
     num_epochs = args.num_epochs
@@ -243,7 +231,9 @@ def main(args):
     for epoch in tqdm(range(num_epochs), desc="Training Progress"):
         # Huấn luyện
         train_loss = train_epoch(model, train_dataloader, scaler, optimizer, scheduler, device, epoch)
-
+        if (epoch+1) % 2 == 0:
+            _ = train_epoch_(model, val_dataloader, scaler, optimizer, scheduler, device, epoch)
+            _ = train_epoch_(model, _dataloader, scaler, optimizer, scheduler, device, epoch)
         # Đánh giá
         val_loss = validate(model, val_dataloader, scheduler, device)
         
@@ -252,11 +242,6 @@ def main(args):
         print(f'Training Loss: {train_loss:.4f}')
         print(f'Validation Loss: {val_loss:.4f}')
         print(f'Learning Rate: {scheduler.get_last_lr()[0]:.6f}')
-        
-        # Dynamic caption weight trong mô hình
-        # if hasattr(model, 'caption_loss_weight'):
-        #     dynamic_caption_weight = model.caption_loss_weight * min(1.5, 1.0 + 0.5 * epoch / num_epochs)
-        #     print(f'Caption Loss Weight: {dynamic_caption_weight:.4f}')
         
         # Lưu mô hình tốt nhất
         if val_loss < best_val_loss:
